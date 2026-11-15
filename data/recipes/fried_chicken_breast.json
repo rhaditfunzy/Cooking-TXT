@@ -1,0 +1,21 @@
+{
+    "id": "fried_chicken_breast",
+    "name": "Fried Chicken Breast",
+    "difficulty": "easy",
+    "ingredients": [
+        {
+            "id": "chicken_breast",
+            "quantity": 1,
+            "timing": 2.0
+        },
+        {
+            "id": "salt",
+            "quantity": 1,
+            "timing": 5.0
+        }
+    ],
+    "cooking_time": 10.0,
+    "base_price": 35,
+    "image": "assets/images/recipes/fried_chicken_breast.png",
+    "description": "ayam goreng rumahan"
+}

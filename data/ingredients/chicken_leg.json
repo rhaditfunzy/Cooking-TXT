@@ -1,8 +1,8 @@
 {
-  "id": "chicken_leg",
-  "name": "Chicken Leg",
-  "category": "meat",
-  "market_price": 18,
-  "image": "assets/images/ingredients/chicken_leg.png",
-  "description": "Paha ayam."
+    "id": "chicken_leg",
+    "name": "Chicken Leg",
+    "category": "meat",
+    "market_price": 18,
+    "image": "",
+    "description": "paha ayam"
 }
