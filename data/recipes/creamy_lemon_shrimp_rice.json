@@ -1,0 +1,31 @@
+{
+  "id": "creamy_lemon_shrimp_rice",
+  "name": "Creamy Lemon Shrimp Rice",
+  "difficulty": "normal",
+  "ingredients": [
+    {
+      "id": "shrimp",
+      "quantity": 1,
+      "timing": 2
+    },
+    {
+      "id": "rice",
+      "quantity": 1,
+      "timing": 8
+    },
+    {
+      "id": "milk",
+      "quantity": 1,
+      "timing": 10
+    },
+    {
+      "id": "lemon",
+      "quantity": 1,
+      "timing": 5
+    }
+  ],
+  "cooking_time": 35,
+  "base_price": 110,
+  "image": "assets/images/recipes/creamy_lemon_shrimp_rice.png",
+  "description": "Nasi udang dengan saus krim susu dan sentuhan lemon segar."
+}
