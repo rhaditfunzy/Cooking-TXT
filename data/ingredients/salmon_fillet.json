@@ -1,0 +1,8 @@
+{
+  "id": "salmon_fillet",
+  "name": "Salmon Fillet",
+  "category": "seafood",
+  "market_price": 45,
+  "image": "assets/images/ingredients/salmon_fillet.png",
+  "description": "Fillet salmon."
+}

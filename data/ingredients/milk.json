@@ -1,0 +1,8 @@
+{
+  "id": "milk",
+  "name": "Milk",
+  "category": "other",
+  "market_price": 5,
+  "image": "assets/images/ingredients/milk.png",
+  "description": "Susu."
+}

@@ -1,0 +1,7 @@
+"""Nama layar yang tersedia di game."""
+HOME = "home"
+MARKET = "market"
+RECIPES = "recipes"
+COOKING = "cooking"
+INVENTORY = "inventory"
+PROFILE = "profile"

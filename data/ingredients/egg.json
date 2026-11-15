@@ -1,0 +1,8 @@
+{
+  "id": "egg",
+  "name": "Egg",
+  "category": "other",
+  "market_price": 6,
+  "image": "assets/images/ingredients/egg.png",
+  "description": "Telur ayam."
+}

@@ -1,0 +1,31 @@
+{
+  "id": "beef_fried_rice",
+  "name": "Beef Fried Rice",
+  "difficulty": "normal",
+  "ingredients": [
+    {
+      "id": "beef",
+      "quantity": 1,
+      "timing": 2
+    },
+    {
+      "id": "rice",
+      "quantity": 1,
+      "timing": 5
+    },
+    {
+      "id": "egg",
+      "quantity": 1,
+      "timing": 30
+    },
+    {
+      "id": "lettuce",
+      "quantity": 1,
+      "timing": 25
+    }
+  ],
+  "cooking_time": 50,
+  "base_price": 100,
+  "image": "assets/images/recipes/beef_fried_rice.png",
+  "description": "Nasi goreng dengan daging sapi."
+}

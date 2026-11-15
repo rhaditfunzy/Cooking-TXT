@@ -1,0 +1,8 @@
+{
+  "id": "beef",
+  "name": "Beef",
+  "category": "meat",
+  "market_price": 35,
+  "image": "assets/images/ingredients/beef.png",
+  "description": "Daging sapi segar."
+}

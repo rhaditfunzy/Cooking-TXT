@@ -1,0 +1,8 @@
+{
+  "id": "potato",
+  "name": "Potato",
+  "category": "vegetable",
+  "market_price": 7,
+  "image": "assets/images/ingredients/potato.png",
+  "description": "Kentang."
+}

@@ -1,0 +1,8 @@
+{
+  "id": "rice",
+  "name": "Rice",
+  "category": "grain",
+  "market_price": 4,
+  "image": "assets/images/ingredients/rice.png",
+  "description": "Beras atau nasi untuk memasak."
+}

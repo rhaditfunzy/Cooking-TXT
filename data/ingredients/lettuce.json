@@ -1,0 +1,8 @@
+{
+  "id": "lettuce",
+  "name": "Lettuce",
+  "category": "vegetable",
+  "market_price": 5,
+  "image": "assets/images/ingredients/lettuce.png",
+  "description": "Daun selada."
+}

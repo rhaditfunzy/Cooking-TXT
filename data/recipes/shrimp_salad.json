@@ -1,0 +1,26 @@
+{
+  "id": "shrimp_salad",
+  "name": "Shrimp Salad",
+  "difficulty": "easy",
+  "ingredients": [
+    {
+      "id": "shrimp",
+      "quantity": 1,
+      "timing": 2
+    },
+    {
+      "id": "lettuce",
+      "quantity": 1,
+      "timing": 20
+    },
+    {
+      "id": "lemon",
+      "quantity": 1,
+      "timing": 10
+    }
+  ],
+  "cooking_time": 30,
+  "base_price": 65,
+  "image": "assets/images/recipes/shrimp_salad.png",
+  "description": "Salad udang segar."
+}

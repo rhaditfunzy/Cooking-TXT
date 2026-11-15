@@ -1,0 +1,8 @@
+{
+  "id": "dough",
+  "name": "Dough",
+  "category": "other",
+  "market_price": 6,
+  "image": "assets/images/ingredients/dough.png",
+  "description": "Adonan siap pakai."
+}
