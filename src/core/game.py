@@ -256,10 +256,10 @@ class Game:
         # Sidebar teal seperti papan menu restoran.
         pygame.draw.rect(self.screen, config.COLORS["nav_dark"], (0, 0, 212, config.WINDOW_HEIGHT))
         pygame.draw.rect(self.screen, config.COLORS["nav"], (0, 0, 212, 145))
-        pygame.draw.line(self.screen, config.COLORS["mustard"], (20, 139), (192, 139), 2)
-        self.draw_text("COOKING", 25, 27, config.COLORS["surface"], self.font_display_small)
-        self.draw_text("TXT", 27, 69, config.COLORS["mustard"], self.font_medium)
-        self.draw_text("RESTAURANT JOURNAL", 27, 111, config.COLORS["surface_light"], self.font_small)
+        pygame.draw.line(self.screen, config.COLORS["mustard"], (20, 113), (192, 113), 2)
+        self.draw_text("COOKING", 25, 17, config.COLORS["surface"], self.font_display_small)
+        self.draw_text("TXT", 27, 49, config.COLORS["mustard"], self.font_medium)
+        self.draw_text("RESTAURANT JOURNAL", 27, 81, config.COLORS["surface_light"], self.font_small)
 
         nav_items = [
             ("home", "Beranda"), ("market", "Market"), ("recipes", "Buku Resep"),
