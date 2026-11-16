@@ -18,7 +18,7 @@ from src.systems.cooking_system import CookingSystem
 from src.systems.economy_system import EconomySystem
 from src.systems.day_system import DaySystem
 from src.utils.json_loader import load_ingredients
-from src.utils.save_manager import SaveManager
+from src.utils.save_manager import SaveManager, SaveError
 from src.utils.asset_loader import AssetLoader
 
 
@@ -55,7 +55,8 @@ class Game:
             ROOT / config.DATA_DIR / "recipes", set(self.ingredients.keys())
         )
         self.save_manager = SaveManager(ROOT / config.SAVE_PATH)
-        self.player = self.save_manager.load() or Player()
+        loaded_player = self.save_manager.load()
+        self.player = loaded_player if loaded_player is not None else Player()
         self.market = MarketSystem(self.ingredients)
         self.inventory = InventorySystem(self.player)
         self.cooking = CookingSystem()
@@ -71,6 +72,13 @@ class Game:
         self.recipe_scroll = 0
         self.message = "Selamat datang! Mulailah dengan membeli bahan di Market."
         self.message_color = config.COLORS["muted"]
+        # SAVE_PROTECTION_V031A: jangan diam-diam menyamarkan kegagalan load.
+        if self.save_manager.last_load_status == "corrupt_backed_up":
+            self.message = "Save rusak diamankan sebagai backup. Sesi baru dimulai."
+            self.message_color = config.COLORS["accent"]
+        elif self.save_manager.last_load_status in {"corrupt_backup_failed", "read_error"}:
+            self.message = "Save tidak aman dibaca/diamankan. Penyimpanan diblokir."
+            self.message_color = config.COLORS["red"]
         self.buttons: dict[str, pygame.Rect] = {}
         self._now = 0.0
         self._last_cooked_food_id: str | None = None
@@ -816,8 +824,16 @@ class Game:
         self.message = message
         self.message_color = config.COLORS["red"] if is_error else config.COLORS["muted"]
 
-    def save_game(self):
-        self.save_manager.save(self.player)
+    def save_game(self) -> bool:
+        try:
+            self.save_manager.save(self.player)
+            return True
+        except SaveError as exc:
+            self.set_message(
+                "Progres gagal disimpan. Save sebelumnya tetap dilindungi.", True
+            )
+            print(f"[SAVE ERROR] {exc}", file=sys.stderr)
+            return False
 
     def open_screen(self, screen_name: str):
         self.screen_name = screen_name
@@ -836,8 +852,8 @@ class Game:
         try:
             self.inventory.consume_recipe_ingredients(recipe)
             self.cooking.start(recipe, self.current_time())
-            self.save_game()
-            self.set_message(f"Memulai {recipe['name']}. Ikuti countdown!", False)
+            if self.save_game():
+                self.set_message(f"Memulai {recipe['name']}. Ikuti countdown!", False)
         except (ValueError, RuntimeError) as exc:
             self.set_message(str(exc), True)
 
@@ -854,8 +870,8 @@ class Game:
         self.player.food_inventory.remove(food)
         self.player.money += price
         self.player.total_revenue += price
-        self.save_game()
-        self.set_message(f"{food.name} terjual seharga {self.money(price)}.")
+        if self.save_game():
+            self.set_message(f"{food.name} terjual seharga {self.money(price)}.")
 
     def handle_action(self, action: str):
         if action.startswith("nav_"):
@@ -873,15 +889,18 @@ class Game:
                 self.set_message("Selesaikan sesi memasak sebelum mengakhiri hari.", True)
             else:
                 DaySystem.end_day(self.player)
-                self.save_game()
-                self.set_message(f"Hari baru dimulai. Sekarang Hari {self.player.day}.")
+                if self.save_game():
+                    self.set_message(f"Hari baru dimulai. Sekarang Hari {self.player.day}.")
         elif action == "profile_save":
-            self.save_game()
-            self.set_message("Progres berhasil disimpan.")
+            if self.save_game():
+                self.set_message("Progres berhasil disimpan.")
         elif action == "cart_buy":
             success, message, _ = self.market.checkout(self.player)
-            self.save_game() if success else None
-            self.set_message(message, not success)
+            if success:
+                if self.save_game():
+                    self.set_message(message)
+            else:
+                self.set_message(message, True)
         elif action == "cart_clear":
             self.market.clear_cart()
             self.cart_scroll = 0
@@ -926,8 +945,8 @@ class Game:
             food = self.cooking.submit_action(self.current_time())
             if food:
                 self.inventory.add_food(food)
-                self.save_game()
-                self.set_message(f"{food.name} selesai: {food.quality.upper()}.")
+                if self.save_game():
+                    self.set_message(f"{food.name} selesai: {food.quality.upper()}.")
             else:
                 self.set_message(self.cooking.message)
         elif action == "cooking_back":
@@ -1037,15 +1056,20 @@ class Game:
         self._present()
 
     def run(self):
-        while self.running:
-            self._now = self.current_time()
-            self.cooking.update(self._now)
-            for event in pygame.event.get():
-                self.handle_event(event)
-            self.draw()
-            self.clock.tick(config.FPS)
-        self.save_game()
-        pygame.quit()
+        try:
+            while self.running:
+                self._now = self.current_time()
+                self.cooking.update(self._now)
+                for event in pygame.event.get():
+                    self.handle_event(event)
+                self.draw()
+                self.clock.tick(config.FPS)
+        finally:
+            # pygame.quit() tetap dijalankan bahkan jika proses save mengalami error tak terduga.
+            try:
+                self.save_game()
+            finally:
+                pygame.quit()
 
 
 def main():
