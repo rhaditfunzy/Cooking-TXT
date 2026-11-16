@@ -28,7 +28,17 @@ class Game:
     def __init__(self):
         pygame.init()
         pygame.display.set_caption(config.GAME_TITLE)
-        self.screen = pygame.display.set_mode((config.WINDOW_WIDTH, config.WINDOW_HEIGHT))
+
+        # Render pada kanvas logis 1280x800, lalu skalakan ke ukuran jendela.
+        # Dengan cara ini koordinat layout tetap konsisten pada monitor berbeda.
+        self.logical_size = (config.WINDOW_WIDTH, config.WINDOW_HEIGHT)
+        self.fullscreen = False
+        self.windowed_size = self._choose_initial_window_size()
+        self.display = pygame.display.set_mode(self.windowed_size, pygame.RESIZABLE)
+        self.screen = pygame.Surface(self.logical_size).convert()
+        self.viewport = pygame.Rect(0, 0, *self.logical_size)
+        self.view_scale = 1.0
+        self._update_viewport()
         self.clock = pygame.time.Clock()
         self.running = True
         # Font tema: letakkan Fraunces-SemiBold.ttf dan NunitoSans-Regular.ttf
@@ -64,6 +74,77 @@ class Game:
         self.buttons: dict[str, pygame.Rect] = {}
         self._now = 0.0
         self._last_cooked_food_id: str | None = None
+
+    # ---------- Window, scaling, and display ----------
+    @staticmethod
+    def _choose_initial_window_size() -> tuple[int, int]:
+        """Pilih ukuran window yang muat di desktop, tetap dengan rasio 16:10."""
+        try:
+            if hasattr(pygame.display, "get_desktop_sizes"):
+                desktop_w, desktop_h = pygame.display.get_desktop_sizes()[0]
+            else:
+                info = pygame.display.Info()
+                desktop_w, desktop_h = info.current_w, info.current_h
+            scale = min(
+                1.0,
+                max(0.5, (desktop_w - 64) / config.WINDOW_WIDTH),
+                max(0.5, (desktop_h - 96) / config.WINDOW_HEIGHT),
+            )
+            return (
+                max(640, int(config.WINDOW_WIDTH * scale)),
+                max(400, int(config.WINDOW_HEIGHT * scale)),
+            )
+        except (IndexError, AttributeError, pygame.error):
+            return (config.WINDOW_WIDTH, config.WINDOW_HEIGHT)
+
+    def _update_viewport(self) -> None:
+        """Hitung area kanvas 16:10 di dalam window/fullscreen."""
+        target = pygame.display.get_surface()
+        if target is None:
+            return
+        width, height = target.get_size()
+        logical_w, logical_h = self.logical_size
+        self.view_scale = min(width / logical_w, height / logical_h)
+        view_w = max(1, int(logical_w * self.view_scale))
+        view_h = max(1, int(logical_h * self.view_scale))
+        self.viewport = pygame.Rect(
+            (width - view_w) // 2,
+            (height - view_h) // 2,
+            view_w,
+            view_h,
+        )
+
+    def _to_logical_pos(self, position: tuple[int, int]) -> tuple[int, int]:
+        """Konversi posisi mouse window ke koordinat kanvas logis."""
+        if not self.viewport.collidepoint(position) or self.view_scale <= 0:
+            return (-1, -1)
+        return (
+            int((position[0] - self.viewport.x) / self.view_scale),
+            int((position[1] - self.viewport.y) / self.view_scale),
+        )
+
+    def _present(self) -> None:
+        """Scale kanvas ke layar tanpa mengubah layout internal."""
+        target = pygame.display.get_surface()
+        if target is None:
+            return
+        target.fill(config.COLORS["background"])
+        scaled = pygame.transform.scale(self.screen, self.viewport.size)
+        target.blit(scaled, self.viewport.topleft)
+        pygame.display.flip()
+
+    def toggle_fullscreen(self) -> None:
+        """F11 / Alt+Enter untuk berpindah fullscreen dan windowed."""
+        if self.fullscreen:
+            self.display = pygame.display.set_mode(self.windowed_size, pygame.RESIZABLE)
+            self.fullscreen = False
+        else:
+            current = pygame.display.get_surface()
+            if current:
+                self.windowed_size = current.get_size()
+            self.display = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+            self.fullscreen = True
+        self._update_viewport()
 
     # ---------- Drawing primitives ----------
     def load_font(self, filename: str, size: int):
@@ -147,7 +228,7 @@ class Game:
         fill = config.COLORS["accent"] if color is None else color
         if not enabled:
             fill = config.COLORS["surface_light"]
-        elif pygame.Rect(rect).collidepoint(pygame.mouse.get_pos()):
+        elif pygame.Rect(rect).collidepoint(self._to_logical_pos(pygame.mouse.get_pos())):
             fill = tuple(min(255, channel + 12) for channel in fill)
         pygame.draw.rect(self.screen, fill, rect, border_radius=9)
         pygame.draw.rect(self.screen, config.COLORS["border_dark"], rect, 1, border_radius=9)
@@ -204,11 +285,28 @@ class Game:
         pygame.draw.rect(self.screen, config.COLORS["border"], day_rect, 1, border_radius=8)
         pygame.draw.rect(self.screen, config.COLORS["paper_alt"], money_rect, border_radius=8)
         pygame.draw.rect(self.screen, config.COLORS["border"], money_rect, 1, border_radius=8)
-        self.draw_text(f"HARI {self.player.day}", day_rect.x + 13, day_rect.y + 12,
-                       config.COLORS["teal"], self.font_medium)
-        pygame.draw.circle(self.screen, config.COLORS["mustard"], (money_rect.x + 22, money_rect.centery), 8)
-        self.draw_text(self.money(self.player.money), money_rect.x + 40, money_rect.y + 10,
-                       config.COLORS["text"], self.font_medium)
+        # Center the day label both horizontally and vertically in its badge.
+        day_surface = self.font_medium.render(f"HARI {self.player.day}", True, config.COLORS["teal"])
+        self.screen.blit(day_surface, day_surface.get_rect(center=day_rect.center))
+
+        # Center the coin icon + balance as one visual group in the cash badge.
+        coin_radius = 8
+        coin_diameter = coin_radius * 2
+        coin_gap = 9
+        money_surface = self.font_medium.render(self.money(self.player.money), True, config.COLORS["text"])
+        group_width = coin_diameter + coin_gap + money_surface.get_width()
+        group_left = money_rect.centerx - group_width // 2
+
+        pygame.draw.circle(
+            self.screen,
+            config.COLORS["mustard"],
+            (group_left + coin_radius, money_rect.centery),
+            coin_radius,
+        )
+        money_rect_text = money_surface.get_rect(
+            midleft=(group_left + coin_diameter + coin_gap, money_rect.centery)
+        )
+        self.screen.blit(money_surface, money_rect_text)
         self.draw_text(f"Terjual {self.player.daily_sales}/{self.player.daily_sell_limit}",
                        1090, 65, config.COLORS["muted"], self.font_small)
 
@@ -342,38 +440,83 @@ class Game:
         self.draw_text("Keranjang belanja", right.x + 19, right.y + 18,
                        config.COLORS["text"], self.font_display_small)
         cart_items = list(self.market.cart.items())
-        visible_cart = cart_items[self.cart_scroll:self.cart_scroll + 9]
+        cart_visible_count = 8
+        visible_cart = cart_items[self.cart_scroll:self.cart_scroll + cart_visible_count]
+        footer_top = right.bottom - 120
+        list_top = right.y + 76
+        row_height = 40
+        list_bottom = footer_top - 10
+
         if not cart_items:
-            self.draw_text("Keranjang masih kosong.", right.x + 20, right.y + 92,
-                           config.COLORS["muted"], self.font_small)
-            self.draw_text("Tambahkan bahan dari katalog di sebelah kiri.", right.x + 20, right.y + 119,
-                           config.COLORS["muted"], self.font_small)
+            # Ilustrasi keranjang sederhana dari primitive Pygame, bukan ikon generik.
+            basket_cx = right.centerx
+            basket_cy = right.y + 205
+            pygame.draw.line(self.screen, config.COLORS["border_dark"],
+                             (basket_cx - 44, basket_cy - 32), (basket_cx - 28, basket_cy + 18), 4)
+            pygame.draw.line(self.screen, config.COLORS["border_dark"],
+                             (basket_cx - 28, basket_cy + 18), (basket_cx + 31, basket_cy + 18), 4)
+            pygame.draw.line(self.screen, config.COLORS["border_dark"],
+                             (basket_cx + 31, basket_cy + 18), (basket_cx + 43, basket_cy - 32), 4)
+            pygame.draw.arc(self.screen, config.COLORS["mustard"],
+                            pygame.Rect(basket_cx - 30, basket_cy - 56, 60, 48), 0.2, 2.9, 4)
+            for offset in (-15, 0, 15):
+                pygame.draw.line(self.screen, config.COLORS["border"],
+                                 (basket_cx + offset, basket_cy - 2),
+                                 (basket_cx + offset, basket_cy + 12), 2)
+            empty_title = self.font_medium.render("Keranjang masih kosong", True, config.COLORS["text"])
+            self.screen.blit(empty_title, empty_title.get_rect(center=(right.centerx, basket_cy + 58)))
+            empty_detail = self.font_small.render("Pilih bahan dari katalog di sebelah kiri.", True,
+                                                  config.COLORS["muted"])
+            self.screen.blit(empty_detail, empty_detail.get_rect(center=(right.centerx, basket_cy + 88)))
         else:
             for index, (ingredient_id, quantity) in enumerate(visible_cart):
-                ingredient = self.ingredients[ingredient_id]
-                y = right.y + 83 + index * 37
-                self.draw_text(ingredient.name, right.x + 20, y, config.COLORS["text"], self.font_small)
-                self.draw_text(f"×{quantity}", right.x + 205, y,
-                               config.COLORS["muted"], self.font_small)
-                price = self.font_small.render(self.money(ingredient.market_price * quantity), True,
-                                               config.COLORS["text"])
-                self.screen.blit(price, price.get_rect(topright=(right.right - 53, y)))
-                self.button(f"cart_remove_{ingredient_id}", "−1",
-                            pygame.Rect(right.right - 43, y - 4, 32, 25), color=config.COLORS["teal"])
-        if len(cart_items) > 9:
-            self.button("cart_scroll_up", "▲", pygame.Rect(right.right - 78, right.y + 17, 27, 26),
+                ingredient = self.ingredients.get(ingredient_id)
+                if ingredient is None:
+                    continue
+                y = list_top + index * row_height
+                if y + row_height > list_bottom:
+                    break
+                row_rect = pygame.Rect(right.x + 13, y, right.width - 26, 35)
+                pygame.draw.rect(self.screen, config.COLORS["paper_alt"], row_rect, border_radius=7)
+                pygame.draw.rect(self.screen, config.COLORS["border"], row_rect, 1, border_radius=7)
+                name = self.font_small.render(ingredient.name, True, config.COLORS["text"])
+                self.screen.blit(name, (row_rect.x + 9, row_rect.y + 2))
+                meta = self.font_small.render(
+                    f"×{quantity}  ·  {self.money(ingredient.market_price * quantity)}",
+                    True, config.COLORS["muted"]
+                )
+                self.screen.blit(meta, (row_rect.x + 9, row_rect.y + 18))
+                self.button(
+                    f"cart_remove_{ingredient_id}", "−",
+                    pygame.Rect(row_rect.right - 31, row_rect.y + 5, 23, 24),
+                    color=config.COLORS["teal"],
+                )
+
+        if len(cart_items) > cart_visible_count:
+            self.button("cart_scroll_up", "▲", pygame.Rect(right.right - 77, right.y + 17, 27, 26),
                         enabled=self.cart_scroll > 0, color=config.COLORS["teal"])
-            self.button("cart_scroll_down", "▼", pygame.Rect(right.right - 45, right.y + 17, 27, 26),
-                        enabled=self.cart_scroll + 9 < len(cart_items), color=config.COLORS["teal"])
+            self.button("cart_scroll_down", "▼", pygame.Rect(right.right - 44, right.y + 17, 27, 26),
+                        enabled=self.cart_scroll + cart_visible_count < len(cart_items),
+                        color=config.COLORS["teal"])
+
+        # Footer dipisahkan dari daftar agar total dan tombol tidak pernah bertabrakan.
+        divider_y = footer_top
         pygame.draw.line(self.screen, config.COLORS["border"],
-                         (right.x + 18, right.y + 430), (right.right - 18, right.y + 430), 1)
-        self.draw_text("Total belanja", right.x + 20, right.y + 447,
+                         (right.x + 18, divider_y), (right.right - 18, divider_y), 1)
+        self.draw_text("Total belanja", right.x + 20, divider_y + 12,
                        config.COLORS["muted"], self.font_small)
-        self.draw_text(self.money(self.market.cart_total()), right.x + 20, right.y + 472,
-                       config.COLORS["text"], self.font_display_small)
-        self.button("cart_buy", "Beli bahan", pygame.Rect(right.x + 18, right.bottom - 51, 150, 34),
+        total_surface = self.font_display_small.render(
+            self.money(self.market.cart_total()), True, config.COLORS["text"]
+        )
+        self.screen.blit(total_surface, (right.x + 20, divider_y + 34))
+        button_y = right.bottom - 46
+        gap = 10
+        button_width = (right.width - 36 - gap) // 2
+        self.button("cart_buy", "Beli bahan",
+                    pygame.Rect(right.x + 18, button_y, button_width, 34),
                     enabled=bool(self.market.cart), color=config.COLORS["accent"])
-        self.button("cart_clear", "Kosongkan", pygame.Rect(right.x + 179, right.bottom - 51, 155, 34),
+        self.button("cart_clear", "Kosongkan",
+                    pygame.Rect(right.x + 18 + button_width + gap, button_y, button_width, 34),
                     enabled=bool(self.market.cart), color=config.COLORS["teal"])
 
     def _ingredient_summary(self, recipe: dict) -> str:
@@ -748,9 +891,9 @@ class Game:
         elif action == "market_scroll_down":
             self.market_scroll = min(max(0, len(self.ingredients) - 12), self.market_scroll + 12)
         elif action == "cart_scroll_up":
-            self.cart_scroll = max(0, self.cart_scroll - 10)
+            self.cart_scroll = max(0, self.cart_scroll - 8)
         elif action == "cart_scroll_down":
-            self.cart_scroll = min(max(0, len(self.market.cart) - 10), self.cart_scroll + 10)
+            self.cart_scroll = min(max(0, len(self.market.cart) - 8), self.cart_scroll + 8)
         elif action == "recipe_scroll_up":
             self.recipe_scroll = max(0, self.recipe_scroll - 6)
         elif action == "recipe_scroll_down":
@@ -807,34 +950,67 @@ class Game:
     def handle_event(self, event):
         if event.type == pygame.QUIT:
             self.running = False
-        elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-            if self.screen_name == state.COOKING:
-                if self.cooking.phase in {"idle", "finished"}:
-                    self.open_screen(state.RECIPES)
+
+        elif event.type == pygame.VIDEORESIZE and not self.fullscreen:
+            width = max(640, int(event.w))
+            height = max(400, int(event.h))
+            self.windowed_size = (width, height)
+            self.display = pygame.display.set_mode(self.windowed_size, pygame.RESIZABLE)
+            self._update_viewport()
+
+        elif event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_F11 or (
+                event.key == pygame.K_RETURN and event.mod & pygame.KMOD_ALT
+            ):
+                self.toggle_fullscreen()
+                return
+            if event.key == pygame.K_ESCAPE:
+                if self.fullscreen:
+                    self.toggle_fullscreen()
+                elif self.screen_name == state.COOKING:
+                    if self.cooking.phase in {"idle", "finished"}:
+                        self.open_screen(state.RECIPES)
+                    else:
+                        self.set_message("Selesaikan sesi memasak sebelum kembali.", True)
                 else:
-                    self.set_message("Selesaikan sesi memasak sebelum kembali.", True)
-            else:
-                self.running = False
+                    self.running = False
+
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            logical_pos = self._to_logical_pos(event.pos)
             for action, rect in reversed(list(self.buttons.items())):
-                if rect.collidepoint(event.pos):
+                if rect.collidepoint(logical_pos):
                     self.handle_action(action)
                     break
+
         elif event.type == pygame.MOUSEWHEEL:
-            mouse_x, _ = pygame.mouse.get_pos()
+            mouse_x, mouse_y = self._to_logical_pos(pygame.mouse.get_pos())
+            if mouse_x < 0 or mouse_y < 0:
+                return
             if self.screen_name == state.INVENTORY:
                 if mouse_x < 885:
-                    self.inventory_scroll = max(0, min(max(0, len(self.player.food_inventory) - 7), self.inventory_scroll - event.y))
+                    self.inventory_scroll = max(
+                        0, min(max(0, len(self.player.food_inventory) - 7),
+                               self.inventory_scroll - event.y)
+                    )
                 else:
                     stock_count = sum(1 for qty in self.player.ingredient_stock.values() if qty > 0)
-                    self.stock_scroll = max(0, min(max(0, stock_count - 13), self.stock_scroll - event.y))
+                    self.stock_scroll = max(
+                        0, min(max(0, stock_count - 13), self.stock_scroll - event.y)
+                    )
             elif self.screen_name == state.MARKET:
                 if mouse_x < 890:
-                    self.market_scroll = max(0, min(max(0, len(self.ingredients) - 12), self.market_scroll - event.y))
+                    self.market_scroll = max(
+                        0, min(max(0, len(self.ingredients) - 12), self.market_scroll - event.y)
+                    )
                 else:
-                    self.cart_scroll = max(0, min(max(0, len(self.market.cart) - 10), self.cart_scroll - event.y))
+                    self.cart_scroll = max(
+                        0, min(max(0, len(self.market.cart) - 8), self.cart_scroll - event.y)
+                    )
             elif self.screen_name == state.RECIPES:
-                self.recipe_scroll = max(0, min(max(0, len(self.recipe_system.all()) - 6), self.recipe_scroll - event.y * 2))
+                self.recipe_scroll = max(
+                    0, min(max(0, len(self.recipe_system.all()) - 6),
+                           self.recipe_scroll - event.y * 2)
+                )
 
 
     def draw(self):
@@ -858,7 +1034,7 @@ class Game:
         elif self.screen_name == state.PROFILE:
             self.draw_profile()
         self.draw_message()
-        pygame.display.flip()
+        self._present()
 
     def run(self):
         while self.running:
