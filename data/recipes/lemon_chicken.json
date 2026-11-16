@@ -1,26 +1,14 @@
 {
-    "id": "lemon_chicken",
-    "name": "Lemon Chicken",
-    "difficulty": "easy",
-    "ingredients": [
-        {
-            "id": "chicken_leg",
-            "quantity": 1,
-            "timing": 2
-        },
-        {
-            "id": "lemon",
-            "quantity": 1,
-            "timing": 10
-        },
-        {
-            "id": "potato",
-            "quantity": 1,
-            "timing": 10
-        }
-    ],
-    "cooking_time": 20.0,
-    "base_price": 72,
-    "image": "assets/images/recipes/Chicken Lemon.png",
-    "description": "Ayam dengan lemon dan kentang."
+  "id": "lemon_chicken",
+  "name": "Lemon Chicken",
+  "difficulty": "easy",
+  "ingredients": [
+    {"id": "chicken_leg", "quantity": 1, "timing": 2},
+    {"id": "lemon", "quantity": 1, "timing": 10},
+    {"id": "potato", "quantity": 1, "timing": 10}
+  ],
+  "cooking_time": 20.0,
+  "base_price": 38,
+  "image": "assets/images/recipes/Chicken Lemon.png",
+  "description": "Ayam dengan lemon dan kentang."
 }

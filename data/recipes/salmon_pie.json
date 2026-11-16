@@ -1,36 +1,16 @@
 {
-    "id": "salmon_pie",
-    "name": "Salmon Pie",
-    "difficulty": "hard",
-    "ingredients": [
-        {
-            "id": "salmon_fillet",
-            "quantity": 1,
-            "timing": 2
-        },
-        {
-            "id": "dough",
-            "quantity": 1,
-            "timing": 5
-        },
-        {
-            "id": "egg",
-            "quantity": 1,
-            "timing": 45
-        },
-        {
-            "id": "milk",
-            "quantity": 1,
-            "timing": 0
-        },
-        {
-            "id": "lemon",
-            "quantity": 1,
-            "timing": 10
-        }
-    ],
-    "cooking_time": 70.0,
-    "base_price": 150,
-    "image": "assets/images/recipes/Salmon Pie.png",
-    "description": "Pai dengan isian salmon."
+  "id": "salmon_pie",
+  "name": "Salmon Pie",
+  "difficulty": "hard",
+  "ingredients": [
+    {"id": "salmon_fillet", "quantity": 1, "timing": 2},
+    {"id": "dough", "quantity": 1, "timing": 5},
+    {"id": "egg", "quantity": 1, "timing": 45},
+    {"id": "milk", "quantity": 1, "timing": 0},
+    {"id": "lemon", "quantity": 1, "timing": 10}
+  ],
+  "cooking_time": 70.0,
+  "base_price": 52,
+  "image": "assets/images/recipes/Salmon Pie.png",
+  "description": "Pai dengan isian salmon."
 }

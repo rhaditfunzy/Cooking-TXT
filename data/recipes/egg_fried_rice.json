@@ -1,21 +1,13 @@
 {
-    "id": "egg_fried_rice",
-    "name": "Egg Fried Rice",
-    "difficulty": "easy",
-    "ingredients": [
-        {
-            "id": "rice",
-            "quantity": 1,
-            "timing": 2
-        },
-        {
-            "id": "egg",
-            "quantity": 1,
-            "timing": 10
-        }
-    ],
-    "cooking_time": 20.0,
-    "base_price": 45,
-    "image": "assets/images/recipes/Egg Fried Rice.png",
-    "description": "Nasi goreng sederhana dengan telur."
+  "id": "egg_fried_rice",
+  "name": "Egg Fried Rice",
+  "difficulty": "easy",
+  "ingredients": [
+    {"id": "rice", "quantity": 1, "timing": 2},
+    {"id": "egg", "quantity": 1, "timing": 10}
+  ],
+  "cooking_time": 20.0,
+  "base_price": 13,
+  "image": "assets/images/recipes/Egg Fried Rice.png",
+  "description": "Nasi goreng sederhana dengan telur."
 }
