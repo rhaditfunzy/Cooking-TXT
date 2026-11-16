@@ -3,6 +3,6 @@
     "name": "Chicken Breast",
     "category": "meat",
     "market_price": 25,
-    "image": "",
+    "image": "assets/images/ingredients/chicken_breast.png",
     "description": "Dada ayam"
 }
