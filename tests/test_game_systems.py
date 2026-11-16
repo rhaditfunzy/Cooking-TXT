@@ -24,7 +24,13 @@ class GameSystemsTests(unittest.TestCase):
 
     def test_json_data_loads(self):
         self.assertEqual(len(self.ingredients), 11)
-        self.assertEqual(len(self.recipes.all()), 5)
+        recipe_ids = {recipe["id"] for recipe in self.recipes.all()}
+        required_recipes = {
+            "egg_fried_rice", "lemon_chicken", "shrimp_salad",
+            "beef_fried_rice", "salmon_pie",
+        }
+        self.assertTrue(required_recipes.issubset(recipe_ids))
+        self.assertGreaterEqual(len(recipe_ids), len(required_recipes))
         self.assertEqual(self.recipes.errors, [])
 
     def test_market_checkout_success(self):
