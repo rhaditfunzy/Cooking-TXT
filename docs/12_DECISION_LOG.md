@@ -70,7 +70,7 @@ Catatan ini menjelaskan keputusan teknis dan asumsi yang digunakan pada build pe
 
 **Alasan:** menjaga format save sederhana untuk versi pertama.
 
-**Konsekuensi:** keluar di tengah cooking setelah bahan dikonsumsi berarti bahan tidak dikembalikan dan sesi tidak dapat dilanjutkan. Pertimbangkan menyimpan snapshot sesi pada iterasi berikutnya.
+**Konsekuensi:** sesi timer yang belum selesai tidak dilanjutkan setelah restart. Mulai v0.3.1b, bahan belum dikonsumsi sampai hasil masakan selesai disimpan sehingga crash tidak menghilangkan stok.
 
 ## DEC-008 — Profit bersih didefinisikan sebagai revenue dikurangi total pembelian bahan
 
@@ -81,3 +81,14 @@ Catatan ini menjelaskan keputusan teknis dan asumsi yang digunakan pada build pe
 **Alasan:** mudah dipahami untuk prototipe ekonomi.
 
 **Konsekuensi:** ini bukan perhitungan laba per produk/COGS; biaya bahan yang masih menjadi stok tetap sudah masuk biaya.
+
+
+## DEC-009 — Cooking menggunakan commit ketika masakan selesai
+
+**Masalah:** bahan yang dikonsumsi saat tombol Mulai Memasak ditekan dapat hilang jika aplikasi crash sebelum makanan dibuat.
+
+**Keputusan:** stok bahan tetap utuh selama sesi. Saat masakan selesai, `InventorySystem.complete_recipe()` menggabungkan kebutuhan bahan, mengonsumsi stok, menambahkan satu `Food`, lalu memanggil callback penyimpanan. Jika penyimpanan gagal, stok dan inventori di-rollback.
+
+**Alasan:** data pemain di disk berubah dari kondisi sebelum transaksi langsung ke kondisi sesudah transaksi melalui SaveManager atomik; tidak ada state setengah jadi.
+
+**Konsekuensi:** timer memasak yang belum selesai tidak dilanjutkan setelah restart. Pemain memulai resep dari awal, tetapi bahan tetap tersedia.

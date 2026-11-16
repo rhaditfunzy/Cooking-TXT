@@ -1,4 +1,4 @@
-"""Aplikasi Pygame dan penghubung seluruh sistem Cooking TXT."""
+"""Aplikasi Pygame dan penghubung seluruh sistem Cooking TXT. TRANSACTIONAL_COOKING_V031B."""
 from __future__ import annotations
 import sys
 from pathlib import Path
@@ -82,6 +82,7 @@ class Game:
         self.buttons: dict[str, pygame.Rect] = {}
         self._now = 0.0
         self._last_cooked_food_id: str | None = None
+        self.pending_cooking_food = None  # hasil selesai yang menunggu save ulang
 
     # ---------- Window, scaling, and display ----------
     @staticmethod
@@ -623,8 +624,12 @@ class Game:
             self.screen.blit(t, t.get_rect(topright=(row_rect.right - 12, row_rect.y + 11)))
         self.draw_text(f"Waktu memasak akhir: {recipe['cooking_time']} detik",
                        left.x + 20, left.bottom - 65, config.COLORS["muted"], self.font_small)
-        self.button("cooking_back", "Kembali", pygame.Rect(left.x + 20, left.bottom - 48, 115, 32),
-                    color=config.COLORS["teal"])
+        if self.cooking.phase in {"countdown", "ingredient_timing", "final_cooking"}:
+            self.button("cooking_cancel", "Batalkan", pygame.Rect(left.x + 20, left.bottom - 48, 115, 32),
+                        color=config.COLORS["accent"])
+        else:
+            self.button("cooking_back", "Kembali", pygame.Rect(left.x + 20, left.bottom - 48, 115, 32),
+                        color=config.COLORS["teal"])
 
         phase_label = {
             "idle": "SIAP MEMASAK", "countdown": "BERSIAP", "ingredient_timing": "MASUKKAN BAHAN",
@@ -690,12 +695,19 @@ class Game:
                 price_label = self.font_medium.render(f"Perkiraan harga jual: {self.money(price)}",
                                                       True, config.COLORS["text"])
                 self.screen.blit(price_label, price_label.get_rect(center=(right.centerx, right.y + 260)))
+            if self.pending_cooking_food is not None:
+                self.draw_text("Hasil belum tersimpan. Bahan masih aman.",
+                               right.x + 125, right.y + 300, config.COLORS["red"], self.font_small)
+                self.button("cooking_retry_commit", "Coba Simpan Lagi",
+                            pygame.Rect(right.x + 190, right.y + 365, 230, 42),
+                            color=config.COLORS["accent"])
+            else:
                 self.draw_text("Hidangan sudah masuk ke Inventori.", right.x + 180, right.y + 300,
                                config.COLORS["muted"], self.font_small)
-            self.button("cooking_inventory", "Buka Inventori",
-                        pygame.Rect(right.x + 125, right.y + 365, 175, 42), color=config.COLORS["teal"])
-            self.button("cooking_again", "Masak Lagi",
-                        pygame.Rect(right.x + 315, right.y + 365, 155, 42), color=config.COLORS["accent"])
+                self.button("cooking_inventory", "Buka Inventori",
+                            pygame.Rect(right.x + 125, right.y + 365, 175, 42), color=config.COLORS["teal"])
+                self.button("cooking_again", "Masak Lagi",
+                            pygame.Rect(right.x + 315, right.y + 365, 155, 42), color=config.COLORS["accent"])
         else:
             enough, missing = self.inventory.has_ingredients(recipe)
             headline = "Bahan siap digunakan." if enough else "Periksa stok bahan sebelum mulai."
@@ -841,6 +853,10 @@ class Game:
             self.inventory_scroll = 0
 
     def start_selected_recipe(self):
+        """Mulai sesi tanpa mengurangi stok; bahan dikonsumsi saat commit selesai."""
+        if self.pending_cooking_food is not None:
+            self.set_message("Simpan hasil masakan sebelumnya terlebih dahulu.", True)
+            return
         recipe = self.recipe_system.get(self.selected_recipe_id or "")
         if not recipe:
             self.set_message("Resep tidak ditemukan.", True)
@@ -850,12 +866,48 @@ class Game:
             self.set_message("Bahan tidak cukup: " + "; ".join(missing), True)
             return
         try:
-            self.inventory.consume_recipe_ingredients(recipe)
             self.cooking.start(recipe, self.current_time())
-            if self.save_game():
-                self.set_message(f"Memulai {recipe['name']}. Ikuti countdown!", False)
+            self.set_message(
+                f"Memulai {recipe['name']}. Bahan dikonsumsi setelah masakan selesai.",
+                False,
+            )
         except (ValueError, RuntimeError) as exc:
             self.set_message(str(exc), True)
+
+    def commit_cooking_result(self, food) -> bool:
+        """Commit konsumsi bahan + hasil makanan, lalu simpan sebagai satu transaksi."""
+        recipe = self.cooking.recipe
+        if not recipe:
+            self.set_message("Resep sesi memasak tidak tersedia; hasil belum disimpan.", True)
+            self.pending_cooking_food = food
+            return False
+
+        if any(item.instance_id == food.instance_id for item in self.player.food_inventory):
+            self.pending_cooking_food = None
+            self.set_message("Hasil masakan sudah tercatat di Inventori.")
+            return True
+
+        try:
+            committed = self.inventory.complete_recipe(
+                recipe, food, persist=self.save_game
+            )
+        except (ValueError, KeyError, TypeError) as exc:
+            self.pending_cooking_food = food
+            self.set_message(f"Hasil belum dapat disimpan: {exc}", True)
+            return False
+
+        if committed:
+            self.pending_cooking_food = None
+            self._last_cooked_food_id = food.instance_id
+            self.set_message(f"{food.name} selesai: {food.quality.upper()}.")
+            return True
+
+        self.pending_cooking_food = food
+        self.set_message(
+            "Hasil masakan belum tersimpan. Bahan tetap aman; tekan Coba Simpan Lagi.",
+            True,
+        )
+        return False
 
     def sell_food(self, instance_id: str):
         food = self.inventory.find_food(instance_id)
@@ -875,8 +927,11 @@ class Game:
 
     def handle_action(self, action: str):
         if action.startswith("nav_"):
+            if self.pending_cooking_food is not None:
+                self.set_message("Simpan hasil masakan terlebih dahulu sebelum berpindah layar.", True)
+                return
             if self.screen_name == state.COOKING and self.cooking.phase not in {"idle", "finished"}:
-                self.set_message("Selesaikan sesi memasak sebelum berpindah layar.", True)
+                self.set_message("Selesaikan atau batalkan sesi memasak sebelum berpindah layar.", True)
                 return
             self.open_screen(action[4:])
             return
@@ -944,11 +999,17 @@ class Game:
         elif action == "cooking_action":
             food = self.cooking.submit_action(self.current_time())
             if food:
-                self.inventory.add_food(food)
-                if self.save_game():
-                    self.set_message(f"{food.name} selesai: {food.quality.upper()}.")
+                self.pending_cooking_food = food
+                self.commit_cooking_result(food)
             else:
                 self.set_message(self.cooking.message)
+        elif action == "cooking_retry_commit":
+            if self.pending_cooking_food is not None:
+                self.commit_cooking_result(self.pending_cooking_food)
+        elif action == "cooking_cancel":
+            if self.cooking.phase in {"countdown", "ingredient_timing", "final_cooking"}:
+                self.cooking.reset()
+                self.set_message("Memasak dibatalkan. Semua bahan tetap tersedia di Inventori.")
         elif action == "cooking_back":
             if self.cooking.phase in {"idle", "finished"}:
                 self.open_screen(state.RECIPES)

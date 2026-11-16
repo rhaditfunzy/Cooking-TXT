@@ -15,3 +15,12 @@
 - Memperbarui layout Beranda, Market, Buku Resep, Cooking Station, Inventori, dan Profil Bisnis.
 - Menambahkan pemuatan font lokal Fraunces dan Nunito Sans dengan fallback aman.
 - Mempertahankan ID aksi dan pemanggilan sistem gameplay.
+
+
+## 0.3.1b — Transactional Cooking & Ingredient Protection
+
+- Bahan tidak lagi dikurangi saat memasak dimulai; bahan dikonsumsi saat hasil selesai dan berhasil disimpan.
+- Menambahkan pembatalan sesi memasak tanpa refund manual karena stok belum pernah dikurangi.
+- Menambahkan rollback inventori jika penyimpanan hasil masakan gagal dan tombol Coba Simpan Lagi.
+- Menggabungkan kebutuhan bahan dengan ID berulang dan mencegah duplikasi `Food.instance_id`.
+- Menambahkan regression tests untuk crash sebelum selesai, cancel, completion, save/reload, rollback, dan kebutuhan bahan berulang.
