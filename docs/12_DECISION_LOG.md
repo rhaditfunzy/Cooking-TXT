@@ -92,3 +92,14 @@ Catatan ini menjelaskan keputusan teknis dan asumsi yang digunakan pada build pe
 **Alasan:** data pemain di disk berubah dari kondisi sebelum transaksi langsung ke kondisi sesudah transaksi melalui SaveManager atomik; tidak ada state setengah jadi.
 
 **Konsekuensi:** timer memasak yang belum selesai tidak dilanjutkan setelah restart. Pemain memulai resep dari awal, tetapi bahan tetap tersedia.
+
+
+## DEC-010 — Safe exit requires an explicit confirmation
+
+**Masalah:** tombol close pada jendela dan ESC dapat menutup aplikasi tanpa konfirmasi atau kesempatan memastikan progres tersimpan.
+
+**Keputusan:** semua jalur keluar meminta konfirmasi. Keluar hanya dilakukan setelah save berhasil; jika save gagal, aplikasi tetap terbuka dan pemain dapat mencoba lagi atau memilih keluar tanpa menyimpan secara eksplisit.
+
+**Alasan:** mencegah penutupan tidak sengaja dan memberi pemain kendali yang jelas ketika penyimpanan bermasalah.
+
+**Konsekuensi:** dialog keluar menambah satu langkah. Timer sesi memasak dijeda saat konfirmasi terbuka dan deadline digeser saat pemain kembali. Sesi memasak yang belum selesai tetap tidak dilanjutkan setelah restart, tetapi stok bahan aman sesuai DEC-007 dan transaksi v0.3.1b.

@@ -26,11 +26,32 @@ class CookingSystem:
         self.countdown_end = 0.0
         self.target_time = 0.0
         self.started_at = 0.0
+        self.paused_at: float | None = None
         self.step_index = 0
         self.deviations: list[float] = []
         self.last_deviation: float | None = None
         self.finished_food: Food | None = None
         self.message = "Pilih resep untuk mulai memasak."
+
+    def pause(self, now: float) -> None:
+        # Freeze an active timer while a confirmation modal is shown.
+        if self.paused_at is None and self.phase in {
+            "countdown", "ingredient_timing", "final_cooking"
+        }:
+            self.paused_at = float(now)
+
+    def resume(self, now: float) -> None:
+        # Shift active deadlines by the paused duration, preserving remaining time.
+        if self.paused_at is None:
+            return
+        duration = max(0.0, float(now) - self.paused_at)
+        self.started_at += duration
+        if self.phase == "countdown":
+            self.countdown_end += duration
+            self.target_time += duration
+        elif self.phase in {"ingredient_timing", "final_cooking"}:
+            self.target_time += duration
+        self.paused_at = None
 
     def start(self, recipe: dict[str, Any], now: float) -> None:
         if self.phase not in {"idle", "finished"}:
@@ -38,6 +59,7 @@ class CookingSystem:
         self.recipe = recipe
         self.phase = "countdown"
         self.started_at = now
+        self.paused_at = None
         self.countdown_end = now + self.countdown_seconds
         self.target_time = self.countdown_end
         self.step_index = 0
@@ -47,6 +69,8 @@ class CookingSystem:
         self.message = "Bersiap!"
 
     def update(self, now: float) -> None:
+        if self.paused_at is not None:
+            return
         if self.phase == "countdown" and now >= self.countdown_end:
             self.phase = "ingredient_timing"
             first_interval = float(self.recipe["ingredients"][0]["timing"])
@@ -67,6 +91,8 @@ class CookingSystem:
 
     def submit_action(self, now: float) -> Food | None:
         """Masukkan bahan berikutnya atau ambil makanan saat timer selesai."""
+        if self.paused_at is not None:
+            return None
         if self.phase not in {"ingredient_timing", "final_cooking"} or not self.recipe:
             return None
         deviation = abs(now - self.target_time)

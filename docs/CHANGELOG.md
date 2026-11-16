@@ -24,3 +24,12 @@
 - Menambahkan rollback inventori jika penyimpanan hasil masakan gagal dan tombol Coba Simpan Lagi.
 - Menggabungkan kebutuhan bahan dengan ID berulang dan mencegah duplikasi `Food.instance_id`.
 - Menambahkan regression tests untuk crash sebelum selesai, cancel, completion, save/reload, rollback, dan kebutuhan bahan berulang.
+
+
+## 0.3.1c — Safe Exit & ESC Handling
+
+- Tombol X dan ESC di luar Cooking Station membuka konfirmasi keluar, bukan menutup aplikasi langsung.
+- ESC saat memasak dan tombol Batalkan meminta konfirmasi; timer dijeda selama dialog, dan stok bahan tetap aman.
+- Progres disimpan sebelum keluar; kegagalan save membuat game tetap terbuka dengan opsi retry.
+- Hasil masakan yang belum tersimpan ditangani secara eksplisit sebelum keluar.
+- Menambahkan `ExitSystem` dan regression tests untuk routing ESC serta skenario save.

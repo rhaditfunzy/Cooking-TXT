@@ -1,4 +1,4 @@
-"""Aplikasi Pygame dan penghubung seluruh sistem Cooking TXT. TRANSACTIONAL_COOKING_V031B."""
+"""Aplikasi Pygame dan penghubung seluruh sistem Cooking TXT. TRANSACTIONAL_COOKING_V031B. SAFE_EXIT_V031C."""
 from __future__ import annotations
 import sys
 from pathlib import Path
@@ -17,6 +17,7 @@ from src.systems.inventory_system import InventorySystem
 from src.systems.cooking_system import CookingSystem
 from src.systems.economy_system import EconomySystem
 from src.systems.day_system import DaySystem
+from src.systems.exit_system import ExitSystem
 from src.utils.json_loader import load_ingredients
 from src.utils.save_manager import SaveManager, SaveError
 from src.utils.asset_loader import AssetLoader
@@ -41,6 +42,7 @@ class Game:
         self._update_viewport()
         self.clock = pygame.time.Clock()
         self.running = True
+        self.exit_system = ExitSystem()  # SAFE_EXIT_V031C
         # Font tema: letakkan Fraunces-SemiBold.ttf dan NunitoSans-Regular.ttf
         # di assets/fonts/. Pygame default hanya dipakai sebagai fallback jika aset belum ada.
         self.font_display = self.load_font("Fraunces-SemiBold.ttf", 36)
@@ -836,6 +838,158 @@ class Game:
         self.message = message
         self.message_color = config.COLORS["red"] if is_error else config.COLORS["muted"]
 
+    def request_exit(self):
+        """Open a confirmation dialog instead of closing immediately."""
+        self.exit_system.request_exit()
+        self.cooking.pause(self.current_time())
+        self.buttons.clear()
+
+    def request_cooking_cancel(self):
+        # Pause the active timer while asking whether to cancel the session.
+        self.exit_system.request_cooking_cancel()
+        self.cooking.pause(self.current_time())
+        self.buttons.clear()
+
+    def cancel_exit_dialog(self):
+        # Resume any active timer with its remaining time preserved.
+        self.cooking.resume(self.current_time())
+        self.exit_system.cancel_dialog()
+        self.buttons.clear()
+
+    def _save_before_exit(self) -> bool:
+        """Persist a pending cooked result first, otherwise save player state."""
+        if self.pending_cooking_food is not None:
+            return self.commit_cooking_result(self.pending_cooking_food)
+        return self.save_game()
+
+    def confirm_exit(self):
+        """Close only after the final save succeeds."""
+        if self.exit_system.confirm_exit(self._save_before_exit):
+            self.running = False
+        else:
+            self.buttons.clear()
+            if self.exit_system.last_error is not None:
+                print(f"[EXIT SAVE ERROR] {self.exit_system.last_error}", file=sys.stderr)
+            self.set_message(
+                "Penyimpanan gagal. Game tetap terbuka; coba lagi atau pilih keluar tanpa menyimpan.",
+                True,
+            )
+
+    def exit_without_saving(self):
+        """Honor an explicit choice to close without another save attempt."""
+        if self.exit_system.exit_without_saving():
+            self.running = False
+
+    def confirm_cooking_cancel(self):
+        """Cancel an active cooking timer only after explicit confirmation."""
+        if self.exit_system.dialog != ExitSystem.COOKING_CANCEL_CONFIRM:
+            return
+        self.exit_system.cancel_dialog()
+        self.cooking.reset()
+        self.open_screen(state.RECIPES)
+        self.buttons.clear()
+        self.set_message("Memasak dibatalkan. Semua bahan tetap tersedia di Inventori.")
+
+    def draw_exit_dialog(self):
+        """Draw a blocking modal for exit and cooking-cancel confirmations."""
+        dialog = self.exit_system.dialog
+        if dialog is None:
+            return
+
+        # Remove every background action so clicks cannot pass through the modal.
+        self.buttons.clear()
+        shade = pygame.Surface(self.logical_size, pygame.SRCALPHA)
+        shade.fill((35, 29, 26, 165))
+        self.screen.blit(shade, (0, 0))
+
+        modal = pygame.Rect(0, 0, 720, 292)
+        modal.center = (self.logical_size[0] // 2, self.logical_size[1] // 2)
+        self.panel(modal, fill=config.COLORS["surface"], border=config.COLORS["border_dark"], radius=16)
+
+        if dialog == ExitSystem.COOKING_CANCEL_CONFIRM:
+            title = "Batalkan sesi memasak?"
+            body = (
+                "Timer dijeda selama dialog terbuka. Jika memilih lanjut, sisa waktu tetap sama. "
+                "Jika dibatalkan, bahan tetap tersimpan di Inventori dan resep dapat dimulai lagi."
+            )
+            actions = [
+                ("dialog_confirm_cooking_cancel", "BATALKAN MEMASAK"),
+                ("dialog_cancel", "LANJUT MEMASAK"),
+            ]
+        elif dialog == ExitSystem.EXIT_SAVE_FAILED:
+            title = "Penyimpanan gagal"
+            body = (
+                "Game tetap terbuka agar progres tidak hilang. Periksa folder save dan izin akses, "
+                "lalu coba simpan lagi. Keluar tanpa menyimpan dapat menghilangkan perubahan "
+                "sejak save terakhir."
+            )
+            if self.pending_cooking_food is not None:
+                body += " Hasil masakan terakhir belum tersimpan; stok bahan tetap aman."
+            actions = [
+                ("dialog_confirm_exit", "COBA SIMPAN LAGI"),
+                ("dialog_exit_without_saving", "KELUAR TANPA SIMPAN"),
+                ("dialog_cancel", "KEMBALI"),
+            ]
+        else:
+            if self.pending_cooking_food is not None:
+                title = "Hasil masakan belum tersimpan"
+                body = (
+                    "Game akan mencoba menyimpan hasil masakan sebelum keluar. Jika memilih "
+                    "keluar tanpa menyimpan, hasil masakan ini akan hilang, tetapi stok bahan "
+                    "tetap aman."
+                )
+                actions = [
+                    ("dialog_confirm_exit", "SIMPAN & KELUAR"),
+                    ("dialog_exit_without_saving", "BUANG HASIL & KELUAR"),
+                    ("dialog_cancel", "KEMBALI"),
+                ]
+            elif self.cooking.phase not in {"idle", "finished"}:
+                title = "Keluar saat memasak?"
+                body = (
+                    "Progres akan disimpan sebelum aplikasi ditutup. Timer memasak yang sedang "
+                    "berjalan akan berhenti, tetapi semua bahan tetap aman di Inventori."
+                )
+                actions = [
+                    ("dialog_confirm_exit", "SIMPAN & KELUAR"),
+                    ("dialog_cancel", "KEMBALI"),
+                ]
+            else:
+                title = "Keluar dari Cooking TXT?"
+                body = "Progres permainan akan disimpan sebelum aplikasi ditutup."
+                actions = [
+                    ("dialog_confirm_exit", "SIMPAN & KELUAR"),
+                    ("dialog_cancel", "KEMBALI"),
+                ]
+
+        self.draw_text(title, modal.x + 34, modal.y + 28,
+                       config.COLORS["text"], self.font_display_small)
+        self.wrap_text(body, modal.x + 36, modal.y + 88, modal.width - 72,
+                       config.COLORS["muted"], self.font, line_height=25, max_lines=4)
+
+        button_y = modal.bottom - 66
+        if len(actions) == 3:
+            button_width, gap = 202, 12
+            start_x = modal.x + (modal.width - (button_width * 3 + gap * 2)) // 2
+            for index, (action, label) in enumerate(actions):
+                self.button(
+                    action, label,
+                    pygame.Rect(start_x + index * (button_width + gap), button_y,
+                                button_width, 42),
+                    color=config.COLORS["accent"] if index == 0 else config.COLORS["teal"],
+                )
+        else:
+            widths = [250, 220]
+            gap = 18
+            total = sum(widths) + gap
+            start_x = modal.x + (modal.width - total) // 2
+            for index, (action, label) in enumerate(actions):
+                self.button(
+                    action, label,
+                    pygame.Rect(start_x + sum(widths[:index]) + index * gap,
+                                button_y, widths[index], 42),
+                    color=config.COLORS["accent"] if index == 0 else config.COLORS["teal"],
+                )
+
     def save_game(self) -> bool:
         try:
             self.save_manager.save(self.player)
@@ -926,6 +1080,16 @@ class Game:
             self.set_message(f"{food.name} terjual seharga {self.money(price)}.")
 
     def handle_action(self, action: str):
+        if self.exit_system.dialog is not None:
+            if action == "dialog_confirm_exit":
+                self.confirm_exit()
+            elif action == "dialog_exit_without_saving":
+                self.exit_without_saving()
+            elif action == "dialog_confirm_cooking_cancel":
+                self.confirm_cooking_cancel()
+            elif action == "dialog_cancel":
+                self.cancel_exit_dialog()
+            return
         if action.startswith("nav_"):
             if self.pending_cooking_food is not None:
                 self.set_message("Simpan hasil masakan terlebih dahulu sebelum berpindah layar.", True)
@@ -1008,8 +1172,7 @@ class Game:
                 self.commit_cooking_result(self.pending_cooking_food)
         elif action == "cooking_cancel":
             if self.cooking.phase in {"countdown", "ingredient_timing", "final_cooking"}:
-                self.cooking.reset()
-                self.set_message("Memasak dibatalkan. Semua bahan tetap tersedia di Inventori.")
+                self.request_cooking_cancel()
         elif action == "cooking_back":
             if self.cooking.phase in {"idle", "finished"}:
                 self.open_screen(state.RECIPES)
@@ -1029,9 +1192,30 @@ class Game:
 
     def handle_event(self, event):
         if event.type == pygame.QUIT:
-            self.running = False
+            # The OS close button is treated exactly like an explicit exit request.
+            if self.exit_system.dialog is None:
+                self.request_exit()
+            return
 
-        elif event.type == pygame.VIDEORESIZE and not self.fullscreen:
+        if self.exit_system.dialog is not None:
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    self.cancel_exit_dialog()
+                elif event.key in {pygame.K_RETURN, pygame.K_KP_ENTER}:
+                    if self.exit_system.dialog == ExitSystem.COOKING_CANCEL_CONFIRM:
+                        self.confirm_cooking_cancel()
+                    else:
+                        self.confirm_exit()
+                return
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                logical_pos = self._to_logical_pos(event.pos)
+                for action, rect in reversed(list(self.buttons.items())):
+                    if rect.collidepoint(logical_pos):
+                        self.handle_action(action)
+                        break
+                return
+
+        if event.type == pygame.VIDEORESIZE and not self.fullscreen:
             width = max(640, int(event.w))
             height = max(400, int(event.h))
             self.windowed_size = (width, height)
@@ -1045,15 +1229,20 @@ class Game:
                 self.toggle_fullscreen()
                 return
             if event.key == pygame.K_ESCAPE:
-                if self.fullscreen:
+                action = self.exit_system.escape_action(
+                    is_cooking=self.screen_name == state.COOKING,
+                    cooking_phase=self.cooking.phase,
+                    fullscreen=self.fullscreen,
+                    pending_result=self.pending_cooking_food is not None,
+                )
+                if action == "leave_fullscreen":
                     self.toggle_fullscreen()
-                elif self.screen_name == state.COOKING:
-                    if self.cooking.phase in {"idle", "finished"}:
-                        self.open_screen(state.RECIPES)
-                    else:
-                        self.set_message("Selesaikan sesi memasak sebelum kembali.", True)
-                else:
-                    self.running = False
+                elif action == "confirm_cooking_cancel":
+                    self.request_cooking_cancel()
+                elif action == "back_to_recipes":
+                    self.open_screen(state.RECIPES)
+                elif action == "request_exit":
+                    self.request_exit()
 
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             logical_pos = self._to_logical_pos(event.pos)
@@ -1114,6 +1303,7 @@ class Game:
         elif self.screen_name == state.PROFILE:
             self.draw_profile()
         self.draw_message()
+        self.draw_exit_dialog()  # SAFE_EXIT_V031C
         self._present()
 
     def run(self):
@@ -1126,9 +1316,11 @@ class Game:
                 self.draw()
                 self.clock.tick(config.FPS)
         finally:
-            # pygame.quit() tetap dijalankan bahkan jika proses save mengalami error tak terduga.
+            # Do not overwrite an explicit "exit without saving" choice, and avoid
+            # writing twice after the confirmation dialog already saved successfully.
             try:
-                self.save_game()
+                if not self.exit_system.skip_final_save and not self.exit_system.final_save_attempted:
+                    self.save_game()
             finally:
                 pygame.quit()
 
